@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家務任務管理 App</title>
+    <style>
+        :root { 
+            --primary: #4a90e2; --bg: #f4f7f6;
+            --finance: #e67e22; --life: #2ecc71;
+            --digital: #9b59b6; --other: #95a5a6; --temp: #f1c40f;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 450px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+        
+        /* 類型切換 */
+        .type-toggle { display: flex; gap: 10px; margin-bottom: 15px; }
+        .type-btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #eee; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .type-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        /* 輸入區域 */
+        .input-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        input, select, textarea, button { padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; width: 100%; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; }
+
+        /* 任務列表 */
+        .task-list { list-style: none; padding: 0; width: 100%; }
+        .task-item { background: #fff; border: 1px solid #eee; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: all 0.3s; }
+        .task-item.completed { opacity: 0.6; background: #f0f0f0; border-style: dashed; }
+        .task-item.completed .task-name { text-decoration: line-through; color: #888; }
+        
+        .task-main { padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; }
+        .task-info { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+        
+        /* 標籤樣式 */
+        .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; color: white; width: fit-content; font-weight: bold; }
+        .cat-finance { background: var(--finance); }
+        .cat-life { background: var(--life); }
+        .cat-digital { background: var(--digital); }
+        .cat-other { background: var(--other); }
+        .cat-temp { background: var(--temp); color: #333; }
+
+        .task-name { font-size: 18px; font-weight: bold; color: #333; margin: 2px 0; }
+        .task-date { font-size: 13px; color: #777; }
+
+        /* 按鈕組 */
+        .btn-group { display: flex; gap: 5px; }
+        .done-btn { background: #27ae60; color: white; padding: 6px 12px; font-size: 13px; width: auto; border-radius: 5px; }
+        .done-btn.undo { background: #95a5a6; }
+        .delete-btn { background: #ff5e5e; color: white; padding: 6px 12px; font-size: 13px; width: auto; border-radius: 5px; }
+
+        /* 備忘錄區域 */
+        .task-edit-area { display: none; padding: 15px; background: #f9f9f9; border-top: 1px solid #eee; }
+        .task-edit-area textarea { min-height: 80px; margin-bottom: 10px; background: white; font-size: 14px; }
+        .save-note-btn { background: #2ecc71; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align: center; margin-top: 0;">🗓 任務管理中心</h2>
+    
+    <div class="input-group">
+        <div class="type-toggle">
+            <button id="btnMonthly" class="type-btn active" onclick="setTaskType('monthly')">每月固定</button>
+            <button id="btnOnce" class="type-btn" onclick="setTaskType('once')">臨時任務</button>
+        </div>
+
+        <input type="text" id="taskName" placeholder="要做什麼事？">
+        
+        <select id="taskCategory">
+            <option value="other">選擇類別</option>
+            <option value="finance">財務 (繳費、卡費)</option>
+            <option value="life">生活 (清潔、祭祀)</option>
+            <option value="digital">數位 (備份、密碼)</option>
+        </select>
+
+        <div id="dateInputArea">
+            <select id="taskDay">
+                <option value="">選擇每月日期</option>
+                <script>for(let i=1; i<=31; i++) document.write(`<option value="${i}">${i} 號</option>`);</script>
+                <option value="last">最後一天</option>
+            </select>
+        </div>
+        
+        <button onclick="addTask()">新增至清單</button>
+    </div>
+
+    <ul class="task-list" id="taskList"></ul>
+</div>
+
+<script>
+    let tasks = JSON.parse(localStorage.getItem('monthlyTasks') || '[]');
+    let currentType = 'monthly';
+
+    const catMap = { finance: '財務', life: '生活', digital: '數位', other: '其他', temp: '臨時' };
+
+    // 切換任務模式 (每月/臨時)
+    function setTaskType(type) {
+        currentType = type;
+        document.getElementById('btnMonthly').className = `type-btn ${type === 'monthly' ? 'active' : ''}`;
+        document.getElementById('btnOnce').className = `type-btn ${type === 'once' ? 'active' : ''}`;
+        
+        const area = document.getElementById('dateInputArea');
+        if(type === 'once') {
+            area.innerHTML = `<input type="date" id="taskDate" value="${new Date().toISOString().split('T')[0]}">`;
+        } else {
+            let s = '<select id="taskDay"><option value="">選擇每月日期</option>';
+            for(let i=1; i<=31; i++) s += `<option value="${i}">${i} 號</option>`;
+            s += '<option value="last">最後一天</option></select>';
+            area.innerHTML = s;
+        }
+    }
+
+    // 新增任務
+    function addTask() {
+        const name = document.getElementById('taskName').value;
+        const cat = currentType === 'once' ? 'temp' : document.getElementById('taskCategory').value;
+        const day = currentType === 'monthly' ? document.getElementById('taskDay').value : document.getElementById('taskDate').value;
+        
+        if (!name || !day) return alert('請完整輸入名稱與日期');
+
+        tasks.push({ 
+            id: Date.now(), 
+            name, 
+            type: currentType, 
+            day, 
+            category: cat, 
+            notes: '',
+            completedMonth: "" 
+        });
+        saveAndRender();
+        document.getElementById('taskName').value = '';
+    }
+
+    // 切換完成狀態 (本月完成邏輯)
+    function toggleComplete(id) {
+        const currentMonth = new Date().toISOString().slice(0, 7); // 例如 "2026-05"
+        const idx = tasks.findIndex(t => t.id === id);
+        
+        if (idx > -1) {
+            if (tasks[idx].completedMonth === currentMonth) {
+                tasks[idx].completedMonth = ""; 
+            } else {
+                tasks[idx].completedMonth = currentMonth;
+                const now = new Date().toLocaleString();
+                tasks[idx].notes += `\n[系統] 於 ${now} 標記完成`;
+            }
+            saveAndRender();
+        }
+    }
+
+    // 展開編輯備忘錄
+    function toggleEdit(id) {
+        const el = document.getElementById(`edit-${id}`);
+        const isNowOpen = el.style.display === 'block';
+        document.querySelectorAll('.task-edit-area').forEach(d => d.style.display = 'none');
+        el.style.display = isNowOpen ? 'none' : 'block';
+    }
+
+    // 儲存備忘資料
+    function saveNote(id) {
+        const text = document.getElementById(`note-${id}`).value;
+        const idx = tasks.findIndex(t => t.id === id);
+        if(idx > -1) {
+            tasks[idx].notes = text;
+            localStorage.setItem('monthlyTasks', JSON.stringify(tasks));
+            alert('備忘已儲存');
+            toggleEdit(id);
+            saveAndRender();
+        }
+    }
+
+    function deleteTask(id) {
+        if(confirm('確定要刪除這項任務嗎？')) {
+            tasks = tasks.filter(t => t.id !== id);
+            saveAndRender();
+        }
+    }
+
+    // 渲染畫面
+    function saveAndRender() {
+        localStorage.setItem('monthlyTasks', JSON.stringify(tasks));
+        const list = document.getElementById('taskList');
+        list.innerHTML = '';
+        
+        const currentMonth = new Date().toISOString().slice(0, 7);
+
+        // 排序：臨時在前，每月則依日期排序
+        tasks.sort((a, b) => {
+            if(a.type !== b.type) return a.type === 'once' ? -1 : 1;
+            const dayA = a.day === 'last' ? 32 : (a.type === 'once' ? a.day : parseInt(a.day));
+            const dayB = b.day === 'last' ? 32 : (b.type === 'once' ? b.day : parseInt(b.day));
+            return dayA > dayB ? 1 : -1;
+        });
+
+        tasks.forEach(t => {
+            const isCompleted = t.completedMonth === currentMonth;
+            const li = document.createElement('li');
+            li.className = `task-item ${isCompleted ? 'completed' : ''}`;
+            
+            const dateStr = t.type === 'once' ? `日期：${t.day}` : `每月 ${t.day === 'last' ? '最後一天' : t.day + ' 號'}`;
+            
+            li.innerHTML = `
+                <div class="task-main" onclick="toggleEdit(${t.id})">
+                    <div class="task-info">
+                        <span class="badge cat-${t.category}">${catMap[t.category] || '任務'}</span>
+                        <div class="task-name">${t.name}</div>
+                        <div class="task-date">${dateStr} ${isCompleted ? '✅' : ''}</div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="done-btn ${isCompleted ? 'undo' : ''}" onclick="event.stopPropagation(); toggleComplete(${t.id})">
+                            ${isCompleted ? '復原' : '完成'}
+                        </button>
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteTask(${t.id})">刪除</button>
+                    </div>
+                </div>
+                <div class="task-edit-area" id="edit-${t.id}">
+                    <textarea id="note-${t.id}" placeholder="點此輸入帳號、細節或備忘...">${t.notes || ''}</textarea>
+                    <button class="save-note-btn" onclick="saveNote(${t.id})">儲存備忘</button>
+                </div>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    saveAndRender();
+</script>
+
+</body>
+</html>
