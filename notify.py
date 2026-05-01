@@ -3,26 +3,30 @@ import json
 import requests
 from datetime import datetime
 
-# 從 GitHub Secrets 取得金鑰
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 def send_message(text):
+    # 診斷資訊：檢查變數是否讀取成功
+    if not TOKEN or not CHAT_ID:
+        print("❌ 錯誤：找不到 TOKEN 或 CHAT_ID，請檢查 GitHub Secrets 設定！")
+        return
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, json=payload)
-
-def check_tasks():
-    # 這裡模擬檢查 index.html 中的任務邏輯 (實務上建議將任務清單存為 tasks.json 方便讀取)
-    # 範例：檢查今天是否為 1 號
-    today = datetime.now()
-    day_str = str(today.day)
     
-    # 這裡你可以手動維護一個清單，或讀取檔案
-    message = f"🔔 早安！今天是 {today.strftime('%Y-%m-%d')}\n提醒你今日任務：\n"
-    
-    # 這裡先寫死一個測試，確保運作正常
-    send_message(message + "檢查 GitHub Actions 自動化通知測試成功！")
+    try:
+        response = requests.post(url, json=payload)
+        result = response.json()
+        if response.status_code == 200:
+            print("✅ 訊息發送成功！")
+        else:
+            print(f"❌ 發送失敗，錯誤碼：{response.status_code}")
+            print(f"❌ 錯誤原因：{result.get('description')}")
+    except Exception as e:
+        print(f"❌ 發生異常：{str(e)}")
 
 if __name__ == "__main__":
-    check_tasks()
+    today = datetime.now().strftime('%Y-%m-%d %H:%M')
+    msg = f"🔔 任務系統測試\n時間：{today}\n恭喜你！自動化通知連線成功！"
+    send_message(msg)
